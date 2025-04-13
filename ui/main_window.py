@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QTabWidget, QMessageBox
 from modules.training import TrainingWidget
 from modules.nutrition import NutritionWidget
 from modules.hydration import HydrationWidget
@@ -6,11 +6,14 @@ from modules.analytics import AnalyticsWidget
 from modules.calendar import CalendarWidget
 from modules.recommendations import RecommendationsWidget
 from modules.achievements import AchievementsWidget
+from PySide6.QtCore import QDate
+from database.db_manager import DatabaseManager
 
 class MainWindow(QMainWindow):
     def __init__(self, user):
         super().__init__()
         self.user = user
+        self.db = DatabaseManager()
         self.setWindowTitle("Sport Tracker")
         self.setGeometry(100, 100, 1200, 800)
         self.init_ui()
@@ -37,3 +40,17 @@ class MainWindow(QMainWindow):
         # Синхронизация достижений
         self.training_widget.training_list.itemChanged.connect(self.achievements_widget.update_achievements)
         self.nutrition_widget.meal_list.itemChanged.connect(self.achievements_widget.update_achievements)
+
+        # Проверка напоминаний
+        self.check_reminders()
+
+    def check_reminders(self):
+        cursor = self.db.conn.cursor()
+        today = QDate.currentDate().toString("yyyy-MM-dd")
+        cursor.execute(
+            "SELECT training_type, training_duration FROM calendar WHERE user_id = ? AND date = ? AND completed = 0",
+            (self.user["id"], today))
+        reminders = cursor.fetchall()
+        for reminder in reminders:
+            if reminder[0]:
+                QMessageBox.information(self, "Напоминание", f"Сегодня: {reminder[0]} ({reminder[1]} мин)")

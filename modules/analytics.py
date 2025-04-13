@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QLabel, QHBoxLayout
 from PySide6.QtCore import QDate
 from database.db_manager import DatabaseManager
 import matplotlib.pyplot as plt
@@ -13,56 +13,124 @@ class AnalyticsWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
+
+        # Выбор периода
         period_layout = QHBoxLayout()
-        self.period_selector = QComboBox(self)
+        self.period_selector = QComboBox()
         self.period_selector.addItems(["Неделя", "Месяц", "Год"])
         self.period_selector.currentTextChanged.connect(self.update_analytics)
         period_layout.addWidget(QLabel("Период:"))
         period_layout.addWidget(self.period_selector)
         layout.addLayout(period_layout)
 
+        # График
         self.figure = plt.Figure()
         self.canvas = FigureCanvas(self.figure)
         layout.addWidget(self.canvas)
-        self.update_analytics()
+
+        # Статистика
+        self.stats_label = QLabel("Статистика:")
+        layout.addWidget(self.stats_label)
+
         self.setLayout(layout)
+        self.update_analytics()
 
     def update_analytics(self):
         self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        current_date = QDate.currentDate()
         period = self.period_selector.currentText()
-
+        end_date = QDate.currentDate()
         if period == "Неделя":
-            start_date = current_date.addDays(-6).toString("yyyy-MM-dd")
+            start_date = end_date.addDays(-6)
         elif period == "Месяц":
-            start_date = current_date.addMonths(-1).toString("yyyy-MM-dd")
+            start_date = end_date.addMonths(-1)
         else:  # Год
-            start_date = current_date.addYears(-1).toString("yyyy-MM-dd")
-        end_date = current_date.toString("yyyy-MM-dd")
+            start_date = end_date.addYears(-1)
+
+        start_date_str = start_date.toString("yyyy-MM-dd")
+        end_date_str = end_date.toString("yyyy-MM-dd")
 
         cursor = self.db.conn.cursor()
 
-        # Питание
+        # Аналитика тренировок
         cursor.execute(
-            "SELECT calories, protein, fat, carbs FROM nutrition WHERE user_id = ? AND date BETWEEN ? AND ?",
-            (self.user["id"], start_date, end_date))
+            "SELECT date, duration, calories FROM trainings WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date",
+            (self.user["id"], start_date_str, end_date_str))
+        training_data = cursor.fetchall()
+
+        # Аналитика питания
+        cursor.execute(
+            "SELECT date, SUM(calories), SUM(protein), SUM(fat), SUM(carbs) FROM nutrition WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY date",
+            (self.user["id"], start_date_str, end_date_str))
         nutrition_data = cursor.fetchall()
-        total_calories = sum(row[0] for row in nutrition_data)
-        total_protein = sum(row[1] for row in nutrition_data)
-        total_fat = sum(row[2] for row in nutrition_data)
-        total_carbs = sum(row[3] for row in nutrition_data)
+
+        # График
+        ax1 = self.figure.add_subplot(211)  # Тренировки
+        ax2 = self.figure.add_subplot(212)  # Питание
 
         # Тренировки
-        cursor.execute(
-            "SELECT calories, duration FROM trainings WHERE user_id = ? AND date BETWEEN ? AND ?",
-            (self.user["id"], start_date, end_date))
-        training_data = cursor.fetchall()
-        total_burned = sum(row[0] for row in training_data)
-        total_duration = sum(row[1] for row in training_data)
+        if training_data:
+            dates = [row[0][-5:] for row in training_data]
+            durations = [row[1] for row in training_data]
+            calories = [row[2] for row in training_data]
+            ax1.bar(dates, durations, width=0.4, label="Длительность (мин)", color="#00C8FF")
+            ax1.bar([i + 0.4 for i in range(len(dates))], calories, width=0.4, label="Калории (ккал)", color="#FF6347")
+            ax1.legend()
+            ax1.set_xticks(range(len(dates)))
+            ax1.set_xticklabels(dates, rotation=45)
+            for i, v in enumerate(durations):
+                ax1.text(i, v + 1, str(v), ha='center')
+            for i, v in enumerate(calories):
+                ax1.text(i + 0.4, v + 1, f"{v:.1f}", ha='center')
+            ax1.set_title(f"Тренировки ({period.lower()})")
+            ax1.set_xlabel("Дата")
+            ax1.set_ylabel("Значение")
 
-        ax.bar(["Калории (еда)", "Белки", "Жиры", "Углеводы", "Сожжено", "Длительность (мин)"],
-               [total_calories, total_protein, total_fat, total_carbs, total_burned, total_duration])
-        ax.set_title(f"Аналитика за {period.lower()}")
-        ax.set_ylabel("Значение")
+        # Питание
+        if nutrition_data:
+            dates = [row[0][-5:] for row in nutrition_data]
+            calories = [row[1] for row in nutrition_data]
+            protein = [row[2] for row in nutrition_data]
+            fat = [row[3] for row in nutrition_data]
+            carbs = [row[4] for row in nutrition_data]
+            ax2.plot(dates, calories, label="Калории (ккал)", color="#FF6347")
+            ax2.plot(dates, protein, label="Белки (г)", color="#00C8FF")
+            ax2.plot(dates, fat, label="Жиры (г)", color="#FFD700")
+            ax2.plot(dates, carbs, label="Углеводы (г)", color="#32CD32")
+            ax2.legend()
+            ax2.set_xticks(range(len(dates)))
+            ax2.set_xticklabels(dates, rotation=45)
+            ax2.set_title(f"Питание ({period.lower()})")
+            ax2.set_xlabel("Дата")
+            ax2.set_ylabel("Значение")
+
+        # Статистика тренировок
+        stats_text = "Статистика тренировок:\n"
+        cursor.execute(
+            "SELECT type, SUM(duration), SUM(calories) FROM trainings WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY type",
+            (self.user["id"], start_date_str, end_date_str))
+        training_stats = cursor.fetchall()
+        total_duration = 0
+        total_calories = 0
+        for stat in training_stats:
+            stats_text += f"{stat[0]}: {stat[1]} мин, {stat[2]:.1f} ккал\n"
+            total_duration += stat[1] or 0
+            total_calories += stat[2] or 0
+        stats_text += f"Итого: {total_duration} мин, {total_calories:.1f} ккал\n\n"
+
+        # Статистика питания
+        stats_text += "Статистика питания:\n"
+        cursor.execute(
+            "SELECT SUM(calories), SUM(protein), SUM(fat), SUM(carbs) FROM nutrition WHERE user_id = ? AND date BETWEEN ? AND ?",
+            (self.user["id"], start_date_str, end_date_str))
+        nutrition_stats = cursor.fetchone()
+        if nutrition_stats and nutrition_stats[0]:
+            stats_text += f"Калории: {nutrition_stats[0]:.1f} ккал\n"
+            stats_text += f"Белки: {nutrition_stats[1]:.1f} г\n"
+            stats_text += f"Жиры: {nutrition_stats[2]:.1f} г\n"
+            stats_text += f"Углеводы: {nutrition_stats[3]:.1f} г\n"
+        else:
+            stats_text += "Нет данных о питании\n"
+
+        self.stats_label.setText(stats_text)
+        self.figure.tight_layout()
         self.canvas.draw()
