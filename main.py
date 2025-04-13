@@ -9,7 +9,14 @@ if __name__ == "__main__":
     apply_dark_theme(app)
     
     auth_dialog = AuthDialog()
-    if auth_dialog.exec():
-        window = MainWindow(auth_dialog.current_user)
-        window.show()
-        sys.exit(app.exec())
+    result = auth_dialog.exec()
+    if result == AuthDialog.Accepted:
+        if auth_dialog.current_user:
+            print(f"Успешный вход: {auth_dialog.current_user}")  # Отладка
+            window = MainWindow(auth_dialog.current_user)
+            window.show()
+            sys.exit(app.exec())
+        else:
+            print("Ошибка: current_user не установлен")  # Отладка
+    else:
+        print("Вход отменён")  # Отладка

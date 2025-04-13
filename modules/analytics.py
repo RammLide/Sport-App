@@ -13,8 +13,6 @@ class AnalyticsWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
-
-        # Выбор периода
         period_layout = QHBoxLayout()
         self.period_selector = QComboBox()
         self.period_selector.addItems(["Неделя", "Месяц", "Год"])
@@ -22,16 +20,11 @@ class AnalyticsWidget(QWidget):
         period_layout.addWidget(QLabel("Период:"))
         period_layout.addWidget(self.period_selector)
         layout.addLayout(period_layout)
-
-        # График
         self.figure = plt.Figure()
         self.canvas = FigureCanvas(self.figure)
         layout.addWidget(self.canvas)
-
-        # Статистика
         self.stats_label = QLabel("Статистика:")
         layout.addWidget(self.stats_label)
-
         self.setLayout(layout)
         self.update_analytics()
 
@@ -53,19 +46,44 @@ class AnalyticsWidget(QWidget):
 
         # Аналитика тренировок
         cursor.execute(
-            "SELECT date, duration, calories FROM trainings WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date",
-            (self.user["id"], start_date_str, end_date_str))
+            """
+            SELECT date, duration, calories
+            FROM trainings
+            WHERE user_id = ? AND date BETWEEN ? AND ?
+            ORDER BY date
+            """,
+            (self.user["id"], start_date_str, end_date_str)
+        )
         training_data = cursor.fetchall()
 
         # Аналитика питания
         cursor.execute(
-            "SELECT date, SUM(calories), SUM(protein), SUM(fat), SUM(carbs) FROM nutrition WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY date",
-            (self.user["id"], start_date_str, end_date_str))
+            """
+            SELECT date, SUM(calories), SUM(protein), SUM(fat), SUM(carbs)
+            FROM nutrition
+            WHERE user_id = ? AND date BETWEEN ? AND ?
+            GROUP BY date
+            """,
+            (self.user["id"], start_date_str, end_date_str)
+        )
         nutrition_data = cursor.fetchall()
 
+        # Аналитика воды
+        cursor.execute(
+            """
+            SELECT date, SUM(amount)
+            FROM hydration
+            WHERE user_id = ? AND date BETWEEN ? AND ?
+            GROUP BY date
+            """,
+            (self.user["id"], start_date_str, end_date_str)
+        )
+        hydration_data = cursor.fetchall()
+
         # График
-        ax1 = self.figure.add_subplot(211)  # Тренировки
-        ax2 = self.figure.add_subplot(212)  # Питание
+        ax1 = self.figure.add_subplot(311)  # Тренировки
+        ax2 = self.figure.add_subplot(312)  # Питание
+        ax3 = self.figure.add_subplot(313)  # Вода
 
         # Тренировки
         if training_data:
@@ -103,11 +121,33 @@ class AnalyticsWidget(QWidget):
             ax2.set_xlabel("Дата")
             ax2.set_ylabel("Значение")
 
+        # Вода
+        if hydration_data:
+            dates = [row[0][-5:] for row in hydration_data]
+            amounts = [row[1] for row in hydration_data]
+            ax3.bar(dates, amounts, color="#00C8FF")
+            ax3.set_title(f"Вода ({period.lower()})")
+            ax3.set_xlabel("Дата")
+            ax3.set_ylabel("Объем (мл)")
+            ax3.set_xticks(range(len(dates)))
+            ax3.set_xticklabels(dates, rotation=45)
+            for i, v in enumerate(amounts):
+                ax3.text(i, v + max(amounts)*0.01, f"{v:.0f}", ha='center')
+        else:
+            ax3.text(0.5, 0.5, "Нет данных о воде", ha='center', va='center')
+
         # Статистика тренировок
         stats_text = "Статистика тренировок:\n"
         cursor.execute(
-            "SELECT type, SUM(duration), SUM(calories) FROM trainings WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY type",
-            (self.user["id"], start_date_str, end_date_str))
+            """
+            SELECT tt.name, SUM(t.duration), SUM(t.calories)
+            FROM trainings t
+            JOIN training_types tt ON t.type_id = tt.id
+            WHERE t.user_id = ? AND t.date BETWEEN ? AND ?
+            GROUP BY tt.name
+            """,
+            (self.user["id"], start_date_str, end_date_str)
+        )
         training_stats = cursor.fetchall()
         total_duration = 0
         total_calories = 0
@@ -120,8 +160,13 @@ class AnalyticsWidget(QWidget):
         # Статистика питания
         stats_text += "Статистика питания:\n"
         cursor.execute(
-            "SELECT SUM(calories), SUM(protein), SUM(fat), SUM(carbs) FROM nutrition WHERE user_id = ? AND date BETWEEN ? AND ?",
-            (self.user["id"], start_date_str, end_date_str))
+            """
+            SELECT SUM(calories), SUM(protein), SUM(fat), SUM(carbs)
+            FROM nutrition
+            WHERE user_id = ? AND date BETWEEN ? AND ?
+            """,
+            (self.user["id"], start_date_str, end_date_str)
+        )
         nutrition_stats = cursor.fetchone()
         if nutrition_stats and nutrition_stats[0]:
             stats_text += f"Калории: {nutrition_stats[0]:.1f} ккал\n"
@@ -130,6 +175,15 @@ class AnalyticsWidget(QWidget):
             stats_text += f"Углеводы: {nutrition_stats[3]:.1f} г\n"
         else:
             stats_text += "Нет данных о питании\n"
+
+        # Статистика воды
+        stats_text += "\nСтатистика воды:\n"
+        total_water = self.db.get_hydration_stats(self.user["id"], start_date_str, end_date_str)
+        stats_text += f"Всего: {total_water:.0f} мл\n"
+        profile = self.db.get_user_profile(self.user["id"])
+        if profile and profile[0]:
+            recommended = profile[0] * 30 * 7  # 30 мл/кг в день за неделю
+            stats_text += f"Рекомендуемая норма (неделя): {recommended:.0f} мл"
 
         self.stats_label.setText(stats_text)
         self.figure.tight_layout()
