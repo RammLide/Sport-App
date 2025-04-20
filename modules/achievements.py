@@ -1,4 +1,6 @@
+
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QListWidget, QLabel
+from PySide6.QtGui import QIcon
 from database.db_manager import DatabaseManager
 
 class AchievementsWidget(QWidget):
@@ -10,10 +12,19 @@ class AchievementsWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Ваши достижения:"))
+        
+        # Заголовок
+        title_label = QLabel("Ваши достижения:")
+        title_label.setAccessibleName("header")
+        layout.addWidget(title_label)
+        
         self.achievements_list = QListWidget(self)
+        self.achievements_list.setMinimumHeight(200)  # Даём больше пространства для списка
         layout.addWidget(self.achievements_list)
+        
         self.update_achievements()
+        
+        layout.setSpacing(15)  # Увеличиваем отступы
         self.setLayout(layout)
 
     def update_achievements(self):
@@ -23,5 +34,10 @@ class AchievementsWidget(QWidget):
             "SELECT name, date FROM achievements WHERE user_id = ?",
             (self.user["id"],))
         achievements = cursor.fetchall()
-        for name, date in achievements:
-            self.achievements_list.addItem(f"{name} - {date}")
+        if not achievements:
+            self.achievements_list.addItem("Нет достижений")
+        else:
+            for name, date in achievements:
+                item = f"{name} - {date}"
+                self.achievements_list.addItem(item)
+        cursor.close()

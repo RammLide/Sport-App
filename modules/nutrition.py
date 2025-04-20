@@ -5,8 +5,9 @@ import base64
 import time
 import random
 from urllib.parse import quote
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QHBoxLayout, QComboBox, QListWidget, QDateEdit, QTabWidget, QMessageBox, QFormLayout, QListWidgetItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QHBoxLayout, QSizePolicy, QComboBox, QListWidget, QDateEdit, QTabWidget, QMessageBox, QFormLayout, QListWidgetItem
 from PySide6.QtCore import QTimer, Qt, QThread, Signal, QDate
+from PySide6.QtGui import QIcon
 from googletrans import Translator
 from database.db_manager import DatabaseManager
 import matplotlib.pyplot as plt
@@ -89,104 +90,400 @@ class NutritionWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(15)
         self.tabs = QTabWidget()
         self.add_tab = QWidget()
         self.view_tab = QWidget()
         self.edit_tab = QWidget()
         self.analytics_tab = QWidget()
-        self.tabs.addTab(self.add_tab, "Добавить еду")
-        self.tabs.addTab(self.view_tab, "Просмотр")
-        self.tabs.addTab(self.edit_tab, "Редактировать еду")
-        self.tabs.addTab(self.analytics_tab, "Аналитика")
+        self.tabs.addTab(self.add_tab, QIcon("icons/nutrition.png"), "Добавить еду")
+        self.tabs.addTab(self.view_tab, QIcon("icons/view.png"), "Просмотр")
+        self.tabs.addTab(self.edit_tab, QIcon("icons/edit.png"), "Редактировать еду")
+        self.tabs.addTab(self.analytics_tab, QIcon("icons/analytics.png"), "Аналитика")
         layout.addWidget(self.tabs)
 
         # Вкладка "Добавить еду"
         add_layout = QVBoxLayout()
+        add_layout.setSpacing(10)
+        add_layout.setAlignment(Qt.AlignTop)
         title_label = QLabel("Добавить прием пищи")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00C8FF;")
-        meal_layout = QHBoxLayout()
+        title_label.setAccessibleName("header")
+        
+        meal_form = QFormLayout()
         self.meal_input = QComboBox(self)
         self.meal_input.setEditable(True)
         self.meal_input.setPlaceholderText("Введите еду (например, 'курица')")
+        self.meal_input.setMinimumWidth(300)
+        self.meal_input.setFixedHeight(30)
         self.meal_input.editTextChanged.connect(self.on_text_changed)
         self.weight_input = QLineEdit(self)
         self.weight_input.setPlaceholderText("Вес (г)")
-        meal_layout.addWidget(self.meal_input)
-        meal_layout.addWidget(self.weight_input)
+        self.weight_input.setMinimumWidth(100)
+        self.weight_input.setFixedHeight(30)
+        meal_form.addRow("Название еды:", self.meal_input)
+        meal_form.addRow("Вес (г):", self.weight_input)
+        
         add_btn = QPushButton("Добавить еду")
+        add_btn.setAccessibleName("action")
+        add_btn.setIcon(QIcon("icons/add.png"))
+        add_btn.setMinimumWidth(200)
+        add_btn.setFixedHeight(30)
+        add_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        add_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9500;
+                color: #FFFFFF;
+                border-radius: 8px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #E68A00;
+            }
+            QPushButton:pressed {
+                background-color: #CC7700;
+            }
+        """)
         add_btn.clicked.connect(self.add_meal)
+        add_btn_layout = QHBoxLayout()
+        add_btn_layout.addStretch()
+        add_btn_layout.addWidget(add_btn)
+        add_btn_layout.addStretch()
+        
         self.status_label = QLabel("Начните вводить название еды")
+        self.status_label.setAccessibleName("small")
+        
         add_layout.addWidget(title_label)
-        add_layout.addLayout(meal_layout)
-        add_layout.addWidget(add_btn)
+        add_layout.addLayout(meal_form)
+        add_layout.addLayout(add_btn_layout)
         add_layout.addWidget(self.status_label)
+        add_layout.addStretch()
         self.add_tab.setLayout(add_layout)
 
         # Вкладка "Редактировать еду"
         edit_layout = QVBoxLayout()
+        edit_layout.setSpacing(10)
+        edit_layout.setAlignment(Qt.AlignTop)
         edit_title_label = QLabel("Редактировать прием пищи")
-        edit_title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00C8FF;")
+        edit_title_label.setAccessibleName("header")
+        
         self.edit_meal_form = QFormLayout()
         self.edit_meal_input = QComboBox(self)
         self.edit_meal_input.setEditable(True)
         self.edit_meal_input.setPlaceholderText("Введите еду")
+        self.edit_meal_input.setMinimumWidth(300)
+        self.edit_meal_input.setFixedHeight(30)
         self.edit_weight_input = QLineEdit(self)
         self.edit_weight_input.setPlaceholderText("Вес (г)")
+        self.edit_weight_input.setMinimumWidth(100)
+        self.edit_weight_input.setFixedHeight(30)
         self.edit_meal_form.addRow("Название:", self.edit_meal_input)
         self.edit_meal_form.addRow("Вес (г):", self.edit_weight_input)
+        
         save_edit_btn = QPushButton("Сохранить изменения")
+        save_edit_btn.setAccessibleName("action")
+        save_edit_btn.setIcon(QIcon("icons/save.png"))
+        save_edit_btn.setMinimumWidth(200)
+        save_edit_btn.setFixedHeight(30)
+        save_edit_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        save_edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9500;
+                color: #FFFFFF;
+                border-radius: 8px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #E68A00;
+            }
+            QPushButton:pressed {
+                background-color: #CC7700;
+            }
+        """)
         save_edit_btn.clicked.connect(self.save_edited_meal)
+        save_edit_btn_layout = QHBoxLayout()
+        save_edit_btn_layout.addStretch()
+        save_edit_btn_layout.addWidget(save_edit_btn)
+        save_edit_btn_layout.addStretch()
+        
         self.edit_status_label = QLabel("Выберите еду для редактирования")
+        self.edit_status_label.setAccessibleName("small")
+        
         edit_layout.addWidget(edit_title_label)
         edit_layout.addLayout(self.edit_meal_form)
-        edit_layout.addWidget(save_edit_btn)
+        edit_layout.addLayout(save_edit_btn_layout)
         edit_layout.addWidget(self.edit_status_label)
+        edit_layout.addStretch()
         self.edit_tab.setLayout(edit_layout)
 
         # Вкладка "Просмотр"
         view_layout = QVBoxLayout()
+        view_layout.setSpacing(10)
         self.date_selector = QDateEdit(self)
         self.date_selector.setCalendarPopup(True)
         self.date_selector.setDate(QDate.currentDate())
         self.date_selector.dateChanged.connect(self.update_meal_list)
+        self.date_selector.setMinimumWidth(150)
+        self.date_selector.setFixedHeight(30)
+        self.date_selector.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        
         self.meal_list = QListWidget(self)
+        self.meal_list.setMinimumHeight(200)
         self.meal_list.itemClicked.connect(self.enable_edit_delete_buttons)
+        
         nav_layout = QHBoxLayout()
+        nav_layout.addStretch()
         prev_btn = QPushButton("Предыдущий день")
+        prev_btn.setIcon(QIcon("icons/prev.png"))
+        prev_btn.setMinimumWidth(150)
+        prev_btn.setFixedHeight(30)
+        prev_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        prev_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3A3A3A;
+                color: #FFFFFF;
+                border: 2px solid #00BFFF;
+                border-radius: 8px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:pressed {
+                background-color: #2A2A2A;
+            }
+        """)
         prev_btn.clicked.connect(self.prev_day)
-        next_btn = QPushButton("Следующий день")
-        next_btn.clicked.connect(self.next_day)
         nav_layout.addWidget(prev_btn)
+        
         nav_layout.addWidget(self.date_selector)
+        
+        next_btn = QPushButton("Следующий день")
+        next_btn.setIcon(QIcon("icons/next.png"))
+        next_btn.setMinimumWidth(150)
+        next_btn.setFixedHeight(30)
+        next_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        prev_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3A3A3A;
+                color: #FFFFFF;
+                border: 2px solid #00BFFF;
+                border-radius: 8px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:pressed {
+                background-color: #2A2A2A;
+            }
+        """)
+        next_btn.clicked.connect(self.next_day)
         nav_layout.addWidget(next_btn)
+        nav_layout.addStretch()
+        
         action_layout = QHBoxLayout()
+        action_layout.addStretch()
         self.edit_btn = QPushButton("Изменить")
+        self.edit_btn.setIcon(QIcon("icons/edit.png"))
+        self.edit_btn.setMinimumWidth(150)
+        self.edit_btn.setFixedHeight(30)
+        self.edit_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3A3A3A;
+                color: #FFFFFF;
+                border: 2px solid #00BFFF;
+                border-radius: 8px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:pressed {
+                background-color: #2A2A2A;
+            }
+            QPushButton:disabled {
+                background-color: #2A2A2A;
+                color: #666666;
+                border: 2px solid #00BFFF;
+            }
+        """)
         self.edit_btn.clicked.connect(self.edit_meal)
         self.edit_btn.setEnabled(False)
+        action_layout.addWidget(self.edit_btn)
+        
         self.delete_btn = QPushButton("Удалить")
+        self.delete_btn.setIcon(QIcon("icons/delete.png"))
+        self.delete_btn.setMinimumWidth(150)
+        self.delete_btn.setFixedHeight(30)
+        self.delete_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3A3A3A;
+                color: #FFFFFF;
+                border: 2px solid #00BFFF;
+                border-radius: 8px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4A4A4A;
+            }
+            QPushButton:pressed {
+                background-color: #2A2A2A;
+            }
+            QPushButton:disabled {
+                background-color: #2A2A2A;
+                color: #666666;
+                border: 2px solid #00BFFF;
+            }
+        """)
         self.delete_btn.clicked.connect(self.delete_meal)
         self.delete_btn.setEnabled(False)
-        action_layout.addWidget(self.edit_btn)
         action_layout.addWidget(self.delete_btn)
+        action_layout.addStretch()
+        
         view_layout.addLayout(nav_layout)
         view_layout.addWidget(QLabel("Добавленные продукты:"))
         view_layout.addWidget(self.meal_list)
         view_layout.addLayout(action_layout)
+        view_layout.addStretch()
         self.view_tab.setLayout(view_layout)
         self.update_meal_list()
 
         # Вкладка "Аналитика"
         analytics_layout = QVBoxLayout()
-        self.figure = plt.Figure()
+        analytics_layout.setSpacing(10)
+        
+        # Добавляем выбор периода
+        period_layout = QHBoxLayout()
+        period_label = QLabel("Период:")
+        period_label.setAccessibleName("small")
+        self.period_selector = QComboBox(self)
+        self.period_selector.addItems(["Неделя", "Месяц", "Год"])
+        self.period_selector.currentTextChanged.connect(self.update_analytics)
+        period_layout.addWidget(period_label)
+        period_layout.addWidget(self.period_selector)
+        period_layout.addStretch()
+        analytics_layout.addLayout(period_layout)
+
+        self.figure = plt.Figure(figsize=(14, 6))
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setFixedHeight(400)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.stats_label = QLabel("Статистика питания:")
+        self.stats_label.setAccessibleName("header")
         analytics_layout.addWidget(self.stats_label)
         analytics_layout.addWidget(self.canvas)
+        analytics_layout.addStretch()
         self.analytics_tab.setLayout(analytics_layout)
         self.update_analytics()
 
         self.setLayout(layout)
         self.check_achievements()
+
+    def update_analytics(self):
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        
+        # Прозрачный фон
+        ax.set_facecolor('none')
+        self.figure.set_facecolor('none')
+        
+        # Настройка осей и тиков
+        ax.tick_params(colors='white', labelsize=6)
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        # Определяем период
+        period = self.period_selector.currentText()
+        end_date = self.date_selector.date().toString("yyyy-MM-dd")
+        if period == "Неделя":
+            start_date = self.date_selector.date().addDays(-6).toString("yyyy-MM-dd")
+            group_by = "date"
+            date_format = "%Y-%m-%d"
+            label_format = lambda x: x[-5:]  # Формат даты: MM-DD
+            title_suffix = "неделю"
+        elif period == "Месяц":
+            start_date = self.date_selector.date().addDays(-29).toString("yyyy-MM-dd")
+            group_by = "strftime('%Y-%W', date)"  # Группировка по неделям
+            date_format = "%Y-%W"
+            label_format = lambda x: f"Неделя {x[-2:]}"  # Формат: Неделя XX
+            title_suffix = "месяц"
+        else:  # Год
+            start_date = self.date_selector.date().addDays(-364).toString("yyyy-MM-dd")
+            group_by = "strftime('%Y-%m', date)"  # Группировка по месяцам
+            date_format = "%Y-%m"
+            label_format = lambda x: x[-5:]  # Формат: YYYY-MM
+            title_suffix = "год"
+
+        cursor = self.db.conn.cursor()
+        cursor.execute(
+            f"""
+            SELECT {group_by}, SUM(calories), SUM(protein), SUM(fat), SUM(carbs)
+            FROM nutrition
+            WHERE user_id = ? AND date BETWEEN ? AND ?
+            GROUP BY {group_by}
+            """,
+            (self.user["id"], start_date, end_date)
+        )
+        nutrition_data = cursor.fetchall()
+        if nutrition_data:
+            dates = [label_format(row[0]) for row in nutrition_data]
+            calories = [row[1] for row in nutrition_data]
+            protein = [row[2] for row in nutrition_data]
+            fat = [row[3] for row in nutrition_data]
+            carbs = [row[4] for row in nutrition_data]
+            width = 0.2
+            x = range(len(dates))
+            ax.bar([i - width*1.5 for i in x], calories, width, label="Калории", color="#00C8FF")
+            ax.bar([i - width*0.5 for i in x], protein, width, label="Белки", color="#FF6347")
+            ax.bar([i + width*0.5 for i in x], fat, width, label="Жиры", color="#FFD700")
+            ax.bar([i + width*1.5 for i in x], carbs, width, label="Углеводы", color="#32CD32")
+
+            # Настройка легенды
+            ax.legend(
+                fontsize=8,
+                labelcolor='white',
+                facecolor=(0.1647, 0.1647, 0.1647, 0.9),
+                edgecolor='#FF9500',
+                framealpha=0.9,
+                loc='upper left',
+                bbox_to_anchor=(1.03, 1.0)
+            )
+
+            ax.set_xticks(x)
+            ax.set_xticklabels(dates, rotation=45, color='white')
+            ax.set_title(f"Питание за {title_suffix}", fontsize=8, color='white', pad=15)
+            ax.set_ylabel("Значение", color='white', fontsize=6)
+            ax.set_xlabel("Период", color='white', fontsize=6)
+
+            # Подписи значений над столбцами (только для калорий)
+            for i, v in enumerate(calories):
+                max_height = max(calories[i], protein[i], fat[i], carbs[i])
+                ax.text(i - width*1.5, v + max_height*0.05, f"{v:.1f}", ha='center', color='white', fontsize=6)
+
+            ax.set_position([0.1, 0.15, 0.75, 0.75])
+
+        else:
+            ax.text(0.5, 0.5, "Нет данных", ha='center', va='center', fontsize=8, color='white')
+
+        self.canvas.draw()
+
+        # Статистика
+        stats = self.db.get_nutrition_stats(self.user["id"], start_date, end_date)
+        stats_text = "Статистика питания:\n"
+        if stats and any(stats):
+            stats_text += (
+                f"Калории: {stats[0]:.1f} ккал\n"
+                f"Белки: {stats[1]:.1f} г\n"
+                f"Жиры: {stats[2]:.1f} г\n"
+                f"Углеводы: {stats[3]:.1f} г"
+            )
+        else:
+            stats_text += "Нет данных"
+        self.stats_label.setText(stats_text)
 
     def on_text_changed(self, text):
         if text and (not self.search_thread or not self.search_thread.isRunning()):
@@ -439,59 +736,6 @@ class NutritionWidget(QWidget):
         self.date_selector.setDate(self.date_selector.date().addDays(1))
         self.update_meal_list()
         self.update_analytics()
-
-    def update_analytics(self):
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        start_date = self.date_selector.date().addDays(-6).toString("yyyy-MM-dd")
-        end_date = self.date_selector.date().toString("yyyy-MM-dd")
-        cursor = self.db.conn.cursor()
-        cursor.execute(
-            """
-            SELECT date, SUM(calories), SUM(protein), SUM(fat), SUM(carbs)
-            FROM nutrition
-            WHERE user_id = ? AND date BETWEEN ? AND ?
-            GROUP BY date
-            """,
-            (self.user["id"], start_date, end_date)
-        )
-        nutrition_data = cursor.fetchall()
-        if nutrition_data:
-            dates = [row[0][-5:] for row in nutrition_data]
-            calories = [row[1] for row in nutrition_data]
-            protein = [row[2] for row in nutrition_data]
-            fat = [row[3] for row in nutrition_data]
-            carbs = [row[4] for row in nutrition_data]
-            width = 0.2
-            x = range(len(dates))
-            ax.bar([i - width*1.5 for i in x], calories, width, label="Калории", color="#00C8FF")
-            ax.bar([i - width*0.5 for i in x], protein, width, label="Белки", color="#FF6347")
-            ax.bar([i + width*0.5 for i in x], fat, width, label="Жиры", color="#FFD700")
-            ax.bar([i + width*1.5 for i in x], carbs, width, label="Углеводы", color="#32CD32")
-            ax.set_xticks(x)
-            ax.set_xticklabels(dates, rotation=45)
-            ax.legend()
-            ax.set_title("Питание за неделю")
-            ax.set_ylabel("Значение")
-            for i, v in enumerate(calories):
-                ax.text(i - width*1.5, v + max(calories)*0.01, f"{v:.1f}", ha='center')
-        else:
-            ax.text(0.5, 0.5, "Нет данных", ha='center', va='center')
-        self.figure.tight_layout()
-        self.canvas.draw()
-
-        stats = self.db.get_nutrition_stats(self.user["id"], start_date, end_date)
-        stats_text = "Статистика питания:\n"
-        if stats and any(stats):
-            stats_text += (
-                f"Калории: {stats[0]:.1f} ккал\n"
-                f"Белки: {stats[1]:.1f} г\n"
-                f"Жиры: {stats[2]:.1f} г\n"
-                f"Углеводы: {stats[3]:.1f} г"
-            )
-        else:
-            stats_text += "Нет данных"
-        self.stats_label.setText(stats_text)
 
     def check_achievements(self):
         cursor = self.db.conn.cursor()

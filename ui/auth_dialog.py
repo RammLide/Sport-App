@@ -1,6 +1,8 @@
+# auth_dialog.py
 import json
 import os
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel, QCheckBox, QComboBox, QMessageBox, QTabWidget, QWidget
+from PySide6.QtGui import QIcon
 from database.db_manager import DatabaseManager
 
 class AuthDialog(QDialog):
@@ -9,9 +11,9 @@ class AuthDialog(QDialog):
         self.db = DatabaseManager()
         self.setWindowTitle("Sport Tracker - Авторизация")
         self.setGeometry(200, 200, 400, 500)
-        self.current_user = None  # Инициализируем атрибут
+        self.current_user = None
         self.init_ui()
-        self.load_remembered_user()  # Загружаем сохранённые данные
+        self.load_remembered_user()
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -26,16 +28,26 @@ class AuthDialog(QDialog):
 
         # Вкладка "Вход"
         login_layout = QVBoxLayout()
+        
+        title_label = QLabel("Вход в аккаунт")
+        title_label.setAccessibleName("header")
+        login_layout.addWidget(title_label)
+        
         self.login_username = QLineEdit()
         self.login_username.setPlaceholderText("Имя пользователя")
         self.login_password = QLineEdit()
         self.login_password.setPlaceholderText("Пароль")
         self.login_password.setEchoMode(QLineEdit.Password)
         self.remember_me = QCheckBox("Запомнить меня")
+        
         login_btn = QPushButton("Войти")
+        login_btn.setAccessibleName("action")
+        login_btn.setIcon(QIcon("icons/login.png"))  # Иконка для входа
         login_btn.clicked.connect(self.login)
+        
         self.login_status = QLabel("")
-
+        self.login_status.setAccessibleName("small")
+        
         login_layout.addWidget(QLabel("Имя пользователя:"))
         login_layout.addWidget(self.login_username)
         login_layout.addWidget(QLabel("Пароль:"))
@@ -44,10 +56,16 @@ class AuthDialog(QDialog):
         login_layout.addWidget(login_btn)
         login_layout.addWidget(self.login_status)
         login_layout.addStretch()
+        login_layout.setSpacing(15)
         self.login_tab.setLayout(login_layout)
 
         # Вкладка "Регистрация"
         register_layout = QVBoxLayout()
+        
+        title_label = QLabel("Создать аккаунт")
+        title_label.setAccessibleName("header")
+        register_layout.addWidget(title_label)
+        
         self.register_username = QLineEdit()
         self.register_username.setPlaceholderText("Имя пользователя")
         self.register_password = QLineEdit()
@@ -68,8 +86,12 @@ class AuthDialog(QDialog):
         self.gender_input.addItems(["М", "Ж"])
 
         register_btn = QPushButton("Зарегистрироваться")
+        register_btn.setAccessibleName("action")
+        register_btn.setIcon(QIcon("icons/register.png"))  # Иконка для регистрации
         register_btn.clicked.connect(self.register)
+        
         self.register_status = QLabel("")
+        self.register_status.setAccessibleName("small")
 
         register_layout.addWidget(QLabel("Имя пользователя:"))
         register_layout.addWidget(self.register_username)
@@ -88,12 +110,13 @@ class AuthDialog(QDialog):
         register_layout.addWidget(register_btn)
         register_layout.addWidget(self.register_status)
         register_layout.addStretch()
+        register_layout.setSpacing(15)
         self.register_tab.setLayout(register_layout)
 
+        layout.setSpacing(15)
         self.setLayout(layout)
 
     def load_remembered_user(self):
-        """Загружает сохранённые данные пользователя из settings.json."""
         try:
             if os.path.exists("settings.json"):
                 with open("settings.json", "r") as f:
@@ -104,7 +127,6 @@ class AuthDialog(QDialog):
                         self.login_username.setText(login)
                         self.login_password.setText(password)
                         self.remember_me.setChecked(True)
-                        # Пробуем автоматический вход
                         user = self.db.get_user(login, password)
                         if user:
                             self.current_user = {"id": user[0], "username": user[1]}
@@ -115,7 +137,6 @@ class AuthDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить данные: {str(e)}")
 
     def save_remembered_user(self, login, password):
-        """Сохраняет логин и пароль, если включён remember_me."""
         if self.remember_me.isChecked():
             settings = {"login": login, "password": password}
             with open("settings.json", "w") as f:

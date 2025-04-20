@@ -1,3 +1,4 @@
+# recommendations.py
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import QDate
 from database.db_manager import DatabaseManager
@@ -11,10 +12,18 @@ class RecommendationsWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
+        
+        # Заголовок
+        title_label = QLabel("Рекомендации для вас")
+        title_label.setAccessibleName("header")
+        layout.addWidget(title_label)
+        
         self.advice_label = QLabel("Совет от AI: Загрузите данные для анализа")
         layout.addWidget(self.advice_label)
-        self.update_recommendations()
+        
+        layout.setSpacing(15)
         self.setLayout(layout)
+        self.update_recommendations()
 
     def update_recommendations(self):
         date = QDate.currentDate().toString("yyyy-MM-dd")

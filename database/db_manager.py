@@ -5,7 +5,7 @@ class DatabaseManager:
     def __init__(self):
         self.conn = sqlite3.connect("sport_tracker.db")
         self.create_tables()
-        self.populate_data()
+        self.populate_initial_data()
 
     def create_tables(self):
         cursor = self.conn.cursor()
@@ -133,8 +133,6 @@ class DatabaseManager:
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
-        self.conn.commit()
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS calendar (
                 user_id INTEGER,
@@ -151,37 +149,23 @@ class DatabaseManager:
         """)
         self.conn.commit()
 
-
-    def get_hydration_stats(self, user_id, start_date, end_date):
+    def populate_initial_data(self):
         cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT SUM(amount)
-            FROM hydration
-            WHERE user_id = ? AND date BETWEEN ? AND ?
-            """,
-            (user_id, start_date, end_date)
-        )
-        total = cursor.fetchone()[0] or 0
-        return total
+        # Проверяем, есть ли уже типы тренировок
+        cursor.execute("SELECT COUNT(*) FROM training_types")
+        if cursor.fetchone()[0] > 0:
+            return  # Если данные уже есть, не заполняем
 
-    def populate_data(self):
         # Типы тренировок
         training_types = [
             ("Силовая", 6.0), ("Бег", 7.0), ("Велосипед", 8.0), ("Плавание", 7.0),
             ("Ходьба", 4.0), ("Бокс", 9.0), ("Теннис", 7.0), ("Йога", 3.0),
             ("Гимнастика", 4.0), ("Функциональная", 8.0)
         ]
-        cursor = self.conn.cursor()
-        for name, met in training_types:
-            cursor.execute(
-                "INSERT OR IGNORE INTO training_types (name, met) VALUES (?, ?)",
-                (name, met)
-            )
-        self.conn.commit()
-
-        # Очищаем таблицу exercises перед заполнением
-        cursor.execute("DELETE FROM exercises")
+        cursor.executemany(
+            "INSERT OR IGNORE INTO training_types (name, met) VALUES (?, ?)",
+            training_types
+        )
         self.conn.commit()
 
         # Упражнения
@@ -214,27 +198,26 @@ class DatabaseManager:
             ("Тяга сумо", 6.5), ("Жим ногами с узкой постановкой", 5.5),
             ("Подтягивания узким хватом", 7.0), ("Отжимания с узкой постановкой", 6.0),
             ("Махи гантелями в стороны", 5.0), ("Тяга штанги к подбородку", 5.5),
-            # Новые упражнения
-            ("Жим штанги на горизонтальной скамье", 6.0),  # Грудь
-            ("Разводка гантелей на наклонной скамье", 5.0),  # Грудь
-            ("Тяга Т-штанги", 6.0),  # Спина
-            ("Подтягивания обратным хватом", 7.0),  # Спина
-            ("Приседания с гирей (гоблет)", 6.0),  # Ноги
-            ("Становая тяга на одной ноге с гантелями", 5.5),  # Ноги
-            ("Жим гантелей над головой стоя", 6.0),  # Плечи
-            ("Подъем гантелей через стороны", 5.0),  # Плечи
-            ("Концентрированный подъем на бицепс", 5.0),  # Руки
-            ("Разгибание рук с гантелью над головой", 5.0),  # Руки
-            ("Подъем штанги на грудь", 6.5),  # Полное тело
-            ("Тяга гири к подбородку", 6.0),  # Плечи/трапеции
-            ("Скручивания с блином", 4.5),  # Пресс
-            ("Русский твист с гантелью", 4.5),  # Пресс
-            ("Планка с подтягиванием колена", 5.0),  # Кор
-            ("Махи гирей одной рукой", 6.0),  # Полное тело
-            ("Тяга блока к поясу сидя", 5.5),  # Спина
-            ("Жим ногами с широкой постановкой", 5.5),  # Ноги
-            ("Подъем на носки со штангой", 5.0),  # Икры
-            ("Отведение ноги в тренажере", 5.0),  # Ягодицы
+            ("Жим штанги на горизонтальной скамье", 6.0),
+            ("Разводка гантелей на наклонной скамье", 5.0),
+            ("Тяга Т-штанги", 6.0),
+            ("Подтягивания обратным хватом", 7.0),
+            ("Приседания с гирей (гоблет)", 6.0),
+            ("Становая тяга на одной ноге с гантелями", 5.5),
+            ("Жим гантелей над головой стоя", 6.0),
+            ("Подъем гантелей через стороны", 5.0),
+            ("Концентрированный подъем на бицепс", 5.0),
+            ("Разгибание рук с гантелью над головой", 5.0),
+            ("Подъем штанги на грудь", 6.5),
+            ("Тяга гири к подбородку", 6.0),
+            ("Скручивания с блином", 4.5),
+            ("Русский твист с гантелью", 4.5),
+            ("Планка с подтягиванием колена", 5.0),
+            ("Махи гирей одной рукой", 6.0),
+            ("Тяга блока к поясу сидя", 5.5),
+            ("Жим ногами с широкой постановкой", 5.5),
+            ("Подъем на носки со штангой", 5.0),
+            ("Отведение ноги в тренажере", 5.0),
         ]
         exercises.extend([(ex, 1, met) for ex, met in silovaya])
 
@@ -379,30 +362,18 @@ class DatabaseManager:
         )
         self.conn.commit()
 
-        # Добавляем пример шаблонов
-        templates = [
-            ("Силовая тренировка", "Силовая", 60),
-            ("Бег на выносливость", "Бег", 45),
-            ("Велотренировка", "Велосипед", 30)
-        ]
-        cursor.executemany(
-            "INSERT OR IGNORE INTO training_templates (name, type, duration) VALUES (?, ?, ?)",
-            templates
-        )
-        template_exercises = [
-            (1, "Жим штанги лежа", 3, 10, 50.0, 0, 0),
-            (1, "Приседания со штангой", 3, 12, 60.0, 0, 0),
-            (2, "Бег на дорожке", 0, 0, 0, 5.0, 5.0),
-            (3, "Езда на велотренажере", 0, 0, 0, 10.0, 4.0)
-        ]
-        cursor.executemany(
+    def get_hydration_stats(self, user_id, start_date, end_date):
+        cursor = self.conn.cursor()
+        cursor.execute(
             """
-            INSERT OR IGNORE INTO template_exercises (template_id, name, sets, reps, weight, distance, pace)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            SELECT SUM(amount)
+            FROM hydration
+            WHERE user_id = ? AND date BETWEEN ? AND ?
             """,
-            template_exercises
+            (user_id, start_date, end_date)
         )
-        self.conn.commit()
+        total = cursor.fetchone()[0] or 0
+        return total
 
     def add_user(self, username, password):
         cursor = self.conn.cursor()
@@ -443,11 +414,12 @@ class DatabaseManager:
         )
         return cursor.fetchone()
 
-    def add_exercise_if_not_exists(self, name, type_id, met=5.0):
+    def add_exercise_if_not_exists(self, name, type_id, met=6.0):
         cursor = self.conn.cursor()
         cursor.execute("SELECT id FROM exercises WHERE name = ? AND type_id = ?", (name, type_id))
         result = cursor.fetchone()
         if result:
+            print(f"Exercise '{name}' already exists with ID: {result[0]}")
             return result[0]
         cursor.execute(
             """
@@ -457,7 +429,10 @@ class DatabaseManager:
             (name, type_id, met)
         )
         self.conn.commit()
-        return cursor.lastrowid
+        cursor.execute("SELECT last_insert_rowid()")
+        new_id = cursor.fetchone()[0]
+        print(f"Created new exercise '{name}' with ID: {new_id}")
+        return new_id
 
     def add_training(self, user_id, date, type_id, duration, calories):
         cursor = self.conn.cursor()
@@ -474,14 +449,24 @@ class DatabaseManager:
 
     def add_training_exercise(self, training_id, exercise_id, sets, reps, weight, distance, pace):
         cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO training_exercises (training_id, exercise_id, sets, reps, weight, distance, pace)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (training_id, exercise_id, sets, reps, weight, distance, pace)
-        )
-        self.conn.commit()
+        try:
+            print(f"Inserting into training_exercises: training_id={training_id}, exercise_id={exercise_id}, sets={sets}, reps={reps}, weight={weight}, distance={distance}, pace={pace}")
+            cursor.execute(
+                """
+                INSERT INTO training_exercises (training_id, exercise_id, sets, reps, weight, distance, pace)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (training_id, exercise_id, sets, reps, weight, distance, pace)
+            )
+            self.conn.commit()
+            cursor.execute("SELECT last_insert_rowid()")
+            inserted_id = cursor.fetchone()[0]
+            print(f"Inserted training_exercise ID: {inserted_id}")
+            return inserted_id
+        except Exception as e:
+            print(f"Error in add_training_exercise: {str(e)}")
+            self.conn.rollback()
+            raise
 
     def get_training_types(self):
         cursor = self.conn.cursor()
@@ -508,6 +493,18 @@ class DatabaseManager:
             (training_id,)
         )
         return cursor.fetchone()
+    
+    def get_training_by_id(self, training_id):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, user_id, type_id, duration, calories
+            FROM trainings
+            WHERE id = ?
+            """,
+            (training_id,)
+        )
+        return cursor.fetchone()
 
     def get_training_exercises(self, training_id):
         cursor = self.conn.cursor()
@@ -520,7 +517,9 @@ class DatabaseManager:
             """,
             (training_id,)
         )
-        return cursor.fetchall()
+        results = cursor.fetchall()
+        print(f"get_training_exercises for training_id={training_id}: {results}")
+        return results
 
     def update_training(self, training_id, type_id, duration, calories):
         cursor = self.conn.cursor()
@@ -609,7 +608,6 @@ class DatabaseManager:
         )
         self.conn.commit()
 
-    # Новые методы для шаблонов
     def add_training_template(self, user_id, name, type, duration, exercises):
         cursor = self.conn.cursor()
         cursor.execute(
@@ -649,6 +647,68 @@ class DatabaseManager:
             (template_id,)
         )
         return cursor.fetchall()
+    
+    def delete_template(self, user_id, name):
+        cursor = self.conn.cursor()
+        # Получаем ID шаблона
+        cursor.execute(
+            """
+            SELECT id
+            FROM training_templates
+            WHERE user_id = ? AND name = ?
+            """,
+            (user_id, name)
+        )
+        template = cursor.fetchone()
+        if not template:
+            return
+
+        template_id = template[0]
+        # Удаляем упражнения шаблона
+        cursor.execute(
+            "DELETE FROM template_exercises WHERE template_id = ?",
+            (template_id,)
+        )
+        # Удаляем сам шаблон
+        cursor.execute(
+            "DELETE FROM training_templates WHERE id = ?",
+            (template_id,)
+        )
+        self.conn.commit()
+
+    def get_template_by_name(self, user_id, name):
+        cursor = self.conn.cursor()
+        # Получаем данные шаблона
+        cursor.execute(
+            """
+            SELECT id, user_id, name, type, duration
+            FROM training_templates
+            WHERE user_id = ? AND name = ?
+            """,
+            (user_id, name)
+        )
+        template = cursor.fetchone()
+        if not template:
+            return None
+
+        # Извлекаем упражнения для шаблона
+        template_id = template[0]
+        exercises = self.get_template_exercises(template_id)
+        return template + (exercises,)
+    
+    def get_last_training(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, date, type_id, duration, calories
+            FROM trainings
+            WHERE user_id = ?
+            ORDER BY date DESC
+            LIMIT 1
+            """,
+            (user_id,)
+        )
+        return cursor.fetchone()
 
     def close(self):
         self.conn.close()
