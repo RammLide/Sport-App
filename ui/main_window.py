@@ -29,6 +29,8 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(15)
         main_layout.setContentsMargins(10, 10, 10, 10)  # Стандартные отступы
 
+        
+
         # Создаём контейнер для наложения QTabWidget и кнопки "Выйти"
         self.overlay_widget = QWidget()
         overlay_layout = QVBoxLayout(self.overlay_widget)
@@ -112,6 +114,10 @@ class MainWindow(QMainWindow):
         self.analytics_widget = AnalyticsWidget(self.user)
         self.recommendations_widget = RecommendationsWidget(self.user)
         self.achievements_widget = AchievementsWidget(self.user)
+
+        # Подключаем сигналы для синхронизации между CalendarWidget и TrainingWidget
+        self.calendar_widget.data_saved.connect(self.training_widget.apply_planned_training)
+        self.training_widget.training_added.connect(self.calendar_widget.load_day_data)
 
         # Вкладка "Профиль"
         profile_inner_layout = QVBoxLayout()
@@ -199,7 +205,7 @@ class MainWindow(QMainWindow):
             (self.nutrition_widget, "Питание", "icons/nutrition.PNG"),
             (self.hydration_widget, "Вода", "icons/water.PNG"),
             (self.calendar_widget, "Календарь", "icons/calendar.PNG"),
-            (self.analytics_widget, "Аналитика", "icons/analytics.PNG"),
+            
             (self.recommendations_widget, "Рекомендации", "icons/recommendations.PNG"),
             (self.achievements_widget, "Достижения", "icons/achievements.PNG"),
         ]
@@ -214,6 +220,19 @@ class MainWindow(QMainWindow):
 
         # Загружаем профиль
         self.load_profile()
+
+        # Подключаем сигналы для синхронизации RecommendationsWidget
+        self.calendar_widget.data_saved.connect(self.recommendations_widget.update_recommendations)
+        self.training_widget.training_added.connect(self.recommendations_widget.update_recommendations)
+        # Проверяем, есть ли сигнал data_updated в NutritionWidget и HydrationWidget
+        try:
+            self.nutrition_widget.data_updated.connect(self.recommendations_widget.update_recommendations)
+        except AttributeError:
+            pass  # Если сигнала нет, пропускаем
+        try:
+            self.hydration_widget.data_updated.connect(self.recommendations_widget.update_recommendations)
+        except AttributeError:
+            pass  # Если сигнала нет, пропускаем
 
         # Синхронизация достижений (если есть такие методы в виджетах)
         try:
@@ -292,7 +311,17 @@ class MainWindow(QMainWindow):
         reminders = cursor.fetchall()
         for reminder in reminders:
             if reminder[0]:
-                QMessageBox.information(self, "Напоминание", f"Сегодня: {reminder[0]} ({reminder[1]} мин)")
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Напоминание")
+                msg.setText(f"Сегодня: {reminder[0]} ({reminder[1]} мин)")
+                msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Ignore)
+                msg.setDefaultButton(QMessageBox.Ok)
+                msg.button(QMessageBox.Ok).setText("Перейти к тренировке")
+                msg.button(QMessageBox.Ignore).setText("Пропустить")
+                reply = msg.exec_()
+                if reply == QMessageBox.Ok:
+                    self.tabs.setCurrentWidget(self.training_widget)
+                    self.training_widget.date_selector.setDate(QDate.currentDate())
 
     def logout(self):
         self.logout_signal.emit()

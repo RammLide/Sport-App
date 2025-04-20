@@ -1,11 +1,12 @@
 from PySide6.QtWidgets import QWidget, QComboBox, QVBoxLayout, QPushButton, QLineEdit, QLabel, QSizePolicy, QHBoxLayout, QListWidget, QDateEdit, QTabWidget, QMessageBox, QListWidgetItem
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QIcon
 from database.db_manager import DatabaseManager
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 class HydrationWidget(QWidget):
+    data_updated = Signal()  # Сигнал для уведомления об обновлении данных
     def __init__(self, user):
         super().__init__()
         self.user = user
@@ -395,6 +396,7 @@ class HydrationWidget(QWidget):
             self.update_hydration_list()
             self.update_analytics()
             self.check_achievements()
+            self.data_updated.emit()
         except ValueError as e:
             self.status_label.setText(f"Ошибка: {str(e)}")
 
@@ -451,6 +453,7 @@ class HydrationWidget(QWidget):
             self.update_hydration_list()
             self.update_analytics()
             self.check_achievements()
+            self.data_updated.emit()
         except ValueError as e:
             self.edit_status_label.setText(f"Ошибка: {str(e)}")
 
@@ -485,6 +488,7 @@ class HydrationWidget(QWidget):
                 self.edit_btn.setEnabled(False)
                 self.delete_btn.setEnabled(False)
                 self.status_label.setText("Запись удалена")
+                self.data_updated.emit()
 
     def update_hydration_list(self):
         self.hydration_list.clear()

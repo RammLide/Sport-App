@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QHBoxLayout, QComboBox, QListWidget, QDateEdit, QTabWidget, QMessageBox, QFormLayout, QListWidgetItem, QSizePolicy, QGridLayout, QScrollArea
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QColor, QIcon
 from database.db_manager import DatabaseManager
 import matplotlib.pyplot as plt
@@ -7,7 +7,10 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 
 class TrainingWidget(QWidget):
-    def __init__(self, user):
+
+    training_added = Signal()  # Сигнал, отправляемый после добавления тренировки
+
+    def __init__(self, user, calendar_widget=None):
         super().__init__()
         self.user = user
         self.db = DatabaseManager()
@@ -16,6 +19,14 @@ class TrainingWidget(QWidget):
         self.editing_training_id = None
         self.figure = plt.Figure(facecolor='none')
         self.canvas = FigureCanvas(self.figure)
+        self.calendar_widget = calendar_widget  # Ссылка на CalendarWidget
+        # Инициализируем date_selector как атрибут класса
+        self.date_selector = QDateEdit()
+        self.date_selector.setCalendarPopup(True)
+        self.date_selector.setDate(QDate.currentDate())
+        self.date_selector.setMinimumWidth(150)
+        self.date_selector.setFixedHeight(30)
+        self.date_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.init_ui()
 
     def init_ui(self):
@@ -361,14 +372,7 @@ class TrainingWidget(QWidget):
         view_inner_layout.setSpacing(15)
         view_inner_layout.setAlignment(Qt.AlignTop)
 
-        self.date_selector = QDateEdit(self)
-        self.date_selector.setCalendarPopup(True)
-        self.date_selector.setDate(QDate.currentDate())
-        self.date_selector.dateChanged.connect(self.update_training_list)
-        self.date_selector.setMinimumWidth(150)
-        self.date_selector.setFixedHeight(30)
-        self.date_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
+        # Удаляем повторное создание self.date_selector
         nav_layout = QHBoxLayout()
         prev_btn = QPushButton("Предыдущий день")
         prev_btn.setMinimumWidth(150)
@@ -754,20 +758,18 @@ class TrainingWidget(QWidget):
         period_layout.addStretch()
         analytics_inner_layout.addLayout(period_layout)
 
-        # Поле выбора упражнения (с учётом предыдущих изменений)
+        # Поле выбора упражнения
         exercise_selector_layout = QHBoxLayout()
         exercise_selector_label = QLabel("Упражнение:")
         exercise_selector_label.setAccessibleName("small")
         self.exercise_analytics_selector = QComboBox()
-        self.exercise_analytics_selector.setEditable(True)  # Делаем его searchable
+        self.exercise_analytics_selector.setEditable(True)
         self.exercise_analytics_selector.setMinimumWidth(300)
         self.exercise_analytics_selector.setFixedHeight(30)
-        # Получаем все упражнения из всех типов тренировок
         all_exercises = []
         for type_id, _ in self.db.get_training_types():
             exercises = self.db.get_exercises_by_type(type_id)
             all_exercises.extend([e[1] for e in exercises])
-        # Удаляем дубликаты и сортируем
         all_exercises = sorted(set(all_exercises))
         self.exercise_analytics_selector.addItems(["Выберите упражнение"] + all_exercises)
         self.exercise_analytics_selector.currentTextChanged.connect(self.update_exercise_progress_analytics)
@@ -777,7 +779,7 @@ class TrainingWidget(QWidget):
         analytics_inner_layout.addLayout(exercise_selector_layout)
 
         # Создаем контейнер для графика с фиксированной высотой
-        self.canvas.setFixedHeight(400)  # Фиксированная высота графика в пикселях
+        self.canvas.setFixedHeight(400)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         analytics_inner_layout.addWidget(self.canvas)
         self.toolbar = NavigationToolbar(self.canvas, self)
@@ -787,18 +789,23 @@ class TrainingWidget(QWidget):
         self.stats_label.setAccessibleName("header")
         analytics_inner_layout.addWidget(self.stats_label)
 
-        analytics_inner_layout.addStretch()  # Добавляем растяжение внизу, чтобы содержимое не растягивалось
+        analytics_inner_layout.addStretch()
 
         analytics_scroll.setWidget(analytics_inner_widget)
-        analytics_layout = QVBoxLayout()  # Изменяем на QVBoxLayout для лучшей прокрутки
+        analytics_layout = QVBoxLayout()
         analytics_layout.addWidget(analytics_scroll)
         self.analytics_tab.setLayout(analytics_layout)
         self.update_analytics()
 
         # Устанавливаем основной макет для виджета
         self.setLayout(main_layout)
-        # Вызываем update_exercise_form после инициализации UI для корректной настройки формы
+
+        # Вызываем update_exercise_form после инициализации UI
         self.update_exercise_form()
+
+        # Подключаем apply_planned_training к изменению даты и вызываем его после полной инициализации
+        self.date_selector.dateChanged.connect(self.apply_planned_training)
+        self.apply_planned_training()
 
     def update_exercise_form(self):
         training_type = self.type_input.currentText()
@@ -1004,6 +1011,23 @@ class TrainingWidget(QWidget):
                     training_id, exercise_id, exercise["sets"], exercise["reps"],
                     exercise["weight"], exercise["distance"], exercise["pace"]
                 )
+
+            # Отмечаем тренировку как выполненную в календаре
+            cursor = self.db.conn.cursor()
+            cursor.execute(
+                """
+                UPDATE calendar
+                SET completed = 1
+                WHERE user_id = ? AND date = ? AND training_type = ?
+                """,
+                (self.user["id"], date, training_type)
+            )
+            self.db.conn.commit()
+
+            # Обновляем CalendarWidget, если он передан
+            if self.calendar_widget:
+                self.calendar_widget.load_day_data()
+
             self.status_label.setText(f"Добавлено: {training_type} ({duration} мин, {calories:.1f} ккал)")
             self.exercises.clear()
             self.exercise_list_label.setText("Добавленные упражнения: 0")
@@ -1012,6 +1036,7 @@ class TrainingWidget(QWidget):
             self.update_training_list()
             self.update_analytics()
             self.check_achievements()
+            self.training_added.emit()  # Отправляем сигнал
         except ValueError as e:
             self.status_label.setText(f"Ошибка: {str(e)}")
             QMessageBox.warning(self, "Ошибка", f"Ошибка: {str(e)}")
@@ -1452,3 +1477,28 @@ class TrainingWidget(QWidget):
             self.type_input.setCurrentIndex(0)
             self.template_selector.setCurrentText("Без шаблона")
             self.status_label.setText(f"Шаблон '{template_name}' удалён")
+
+
+
+    def apply_planned_training(self):
+        date = self.date_selector.date().toString("yyyy-MM-dd")
+        cursor = self.db.conn.cursor()
+        cursor.execute(
+            """
+            SELECT training_type, training_duration, completed
+            FROM calendar
+            WHERE user_id = ? AND date = ? AND training_type IS NOT NULL
+            """,
+            (self.user["id"], date)
+        )
+        result = cursor.fetchone()
+        if result and not result[2]:  # Если есть запланированная тренировка и она не выполнена
+            training_type, duration, _ = result
+            self.type_input.setCurrentText(training_type)
+            self.duration_input.setText(str(duration))
+            self.status_label.setText(f"Применена запланированная тренировка: {training_type} ({duration} мин)")
+            self.update_exercise_form()
+        else:
+            self.type_input.setCurrentIndex(0)
+            self.duration_input.clear()
+            self.status_label.setText("Введите данные тренировки")
