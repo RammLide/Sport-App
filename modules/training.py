@@ -3,16 +3,19 @@ from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QColor, QIcon
 from database.db_manager import DatabaseManager
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar
+
 
 class TrainingWidget(QWidget):
     def __init__(self, user):
         super().__init__()
         self.user = user
         self.db = DatabaseManager()
-        self.exercises = []  # Список для временного хранения упражнений
+        self.exercises = []
         self.cardio_types = ["Бег", "Велосипед", "Плавание", "Ходьба"]
-        self.editing_training_id = None  # ID тренировки для редактирования
+        self.editing_training_id = None
+        self.figure = plt.Figure(facecolor='none')
+        self.canvas = FigureCanvas(self.figure)
         self.init_ui()
 
     def init_ui(self):
@@ -739,6 +742,7 @@ class TrainingWidget(QWidget):
         analytics_title_label.setAccessibleName("header")
         analytics_inner_layout.addWidget(analytics_title_label)
 
+        # Добавляем поле выбора периода
         period_layout = QHBoxLayout()
         period_label = QLabel("Период:")
         period_label.setAccessibleName("small")
@@ -750,12 +754,34 @@ class TrainingWidget(QWidget):
         period_layout.addStretch()
         analytics_inner_layout.addLayout(period_layout)
 
+        # Поле выбора упражнения (с учётом предыдущих изменений)
+        exercise_selector_layout = QHBoxLayout()
+        exercise_selector_label = QLabel("Упражнение:")
+        exercise_selector_label.setAccessibleName("small")
+        self.exercise_analytics_selector = QComboBox()
+        self.exercise_analytics_selector.setEditable(True)  # Делаем его searchable
+        self.exercise_analytics_selector.setMinimumWidth(300)
+        self.exercise_analytics_selector.setFixedHeight(30)
+        # Получаем все упражнения из всех типов тренировок
+        all_exercises = []
+        for type_id, _ in self.db.get_training_types():
+            exercises = self.db.get_exercises_by_type(type_id)
+            all_exercises.extend([e[1] for e in exercises])
+        # Удаляем дубликаты и сортируем
+        all_exercises = sorted(set(all_exercises))
+        self.exercise_analytics_selector.addItems(["Выберите упражнение"] + all_exercises)
+        self.exercise_analytics_selector.currentTextChanged.connect(self.update_exercise_progress_analytics)
+        exercise_selector_layout.addWidget(exercise_selector_label)
+        exercise_selector_layout.addWidget(self.exercise_analytics_selector)
+        exercise_selector_layout.addStretch()
+        analytics_inner_layout.addLayout(exercise_selector_layout)
+
         # Создаем контейнер для графика с фиксированной высотой
-        self.figure = plt.Figure(figsize=(14, 6))  # Увеличиваем ширину фигуры
-        self.canvas = FigureCanvas(self.figure)
         self.canvas.setFixedHeight(400)  # Фиксированная высота графика в пикселях
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         analytics_inner_layout.addWidget(self.canvas)
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        analytics_inner_layout.addWidget(self.toolbar)
 
         self.stats_label = QLabel("Статистика по типам тренировок:")
         self.stats_label.setAccessibleName("header")
@@ -1161,6 +1187,10 @@ class TrainingWidget(QWidget):
             self.delete_btn.setEnabled(False)
 
     def update_analytics(self):
+        if self.exercise_analytics_selector.currentText() != "Выберите упражнение":
+            self.update_exercise_progress_analytics()
+            return
+
         self.figure.clear()
         period = self.period_selector.currentText()
         end_date = QDate.currentDate()
@@ -1168,7 +1198,7 @@ class TrainingWidget(QWidget):
             start_date = end_date.addDays(-6)
         elif period == "Месяц":
             start_date = end_date.addMonths(-1)
-        else:  # Год
+        else:
             start_date = end_date.addYears(-1)
 
         start_date_str = start_date.toString("yyyy-MM-dd")
@@ -1186,34 +1216,31 @@ class TrainingWidget(QWidget):
         )
         training_data = cursor.fetchall()
 
-        # Подготовка данных для графика
-        dates = [row[0][-5:] for row in training_data]
-        durations = [row[1] for row in training_data]
-        calories = [row[2] for row in training_data]
-
-        # График
         ax = self.figure.add_subplot(111)
-        ax.set_facecolor('none')  # Прозрачный фон подграфика
+        ax.set_facecolor('none')
         ax.tick_params(colors='white', labelsize=6)
         ax.spines['bottom'].set_color('white')
         ax.spines['left'].set_color('white')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        self.figure.set_facecolor('none')  # Прозрачный фон фигуры
+        self.figure.set_facecolor('none')
 
         if training_data:
+            dates = [row[0][-5:] for row in training_data]
+            durations = [row[1] for row in training_data]
+            calories = [row[2] for row in training_data]
             x = range(len(dates))
-            ax.bar(x, durations, width=0.35, label="Длительность (мин)", color="#00C8FF", edgecolor="#FF9500")
-            ax.bar([i + 0.35 for i in x], calories, width=0.35, label="Калории (ккал)", color="#FF6347", edgecolor="#FF9500")
-            # Перемещаем легенду ближе к скроллбару с небольшим отступом
+
+            ax.plot(x, durations, label="Длительность (мин)", color="#00C8FF", marker='o')
+            ax.plot(x, calories, label="Калории (ккал)", color="#FF6347", marker='o')
             ax.legend(
                 fontsize=8,
                 labelcolor='white',
-                facecolor=(0.1647, 0.1647, 0.1647, 0.9),  # #2A2A2A с прозрачностью 0.9
-                edgecolor='#FF9500',  # Оранжевая рамка
-                framealpha=0.9,  # Прозрачность рамки
+                facecolor=(0.1647, 0.1647, 0.1647, 0.9),
+                edgecolor='#FF9500',
+                framealpha=0.9,
                 loc='upper left',
-                bbox_to_anchor=(1.03, 1.0)  # Позиция: 15% отступа от правого края графика, верх выровнен с заголовком
+                bbox_to_anchor=(1.03, 1.0)
             )
             ax.set_xticks(x)
             ax.set_xticklabels(dates, rotation=45, color='white')
@@ -1221,19 +1248,26 @@ class TrainingWidget(QWidget):
             ax.set_xlabel("Дата", color='white', fontsize=6)
             ax.set_ylabel("Значение", color='white', fontsize=6)
 
-            # Подписи значений с учётом максимума на каждой дате
+            max_duration = max(durations) if durations else 1
+            max_calories = max(calories) if calories else 1
             for i in range(len(dates)):
-                max_height = max(durations[i], calories[i])
-                ax.text(i, durations[i] + max_height * 0.05, str(durations[i]), ha='center', color='white', fontsize=6)
-                ax.text(i + 0.35, calories[i] + max_height * 0.05, f"{calories[i]:.1f}", ha='center', color='white', fontsize=6)
+                # Position duration labels
+                offset_duration = max_duration * 0.05
+                if durations[i] > max_duration * 0.9:
+                    ax.text(i, durations[i] - offset_duration, str(durations[i]), ha='center', va='top', color='white', fontsize=6)
+                else:
+                    ax.text(i, durations[i] + offset_duration, str(durations[i]), ha='center', va='bottom', color='white', fontsize=6)
+                # Position calories labels
+                offset_calories = max_calories * 0.05
+                if calories[i] > max_calories * 0.9:
+                    ax.text(i, calories[i] - offset_calories, f"{calories[i]:.1f}", ha='center', va='top', color='white', fontsize=6)
+                else:
+                    ax.text(i, calories[i] + offset_calories, f"{calories[i]:.1f}", ha='center', va='bottom', color='white', fontsize=6)
 
-            # Устанавливаем границы подграфика вручную, чтобы график не растягивался слишком сильно вправо
-            ax.set_position([0.1, 0.15, 0.75, 0.75])  # [left, bottom, width, height]
-
+            ax.set_position([0.1, 0.15, 0.75, 0.75])
         else:
             ax.text(0.5, 0.5, "Нет данных о тренировках", ha='center', va='center', fontsize=8, color='white')
 
-        # Статистика
         stats_text = "Статистика по типам тренировок:\n"
         cursor.execute(
             """
@@ -1265,11 +1299,97 @@ class TrainingWidget(QWidget):
             stats_text += "Среднее число калорий: 0 ккал"
 
         self.stats_label.setText(stats_text)
-        # Убрали tight_layout, чтобы вручную управлять позицией
         self.canvas.draw()
     def check_achievements(self):
         # Простая заглушка, так как достижения обновляются в AchievementsWidget
         pass
+
+    def update_exercise_progress_analytics(self):
+        exercise_name = self.exercise_analytics_selector.currentText()
+        if exercise_name == "Выберите упражнение":
+            self.update_analytics()  # Revert to overall training progress
+            return
+
+        self.figure.clear()
+        period = self.period_selector.currentText()
+        end_date = QDate.currentDate()
+        if period == "Неделя":
+            start_date = end_date.addDays(-6)
+        elif period == "Месяц":
+            start_date = end_date.addMonths(-1)
+        else:
+            start_date = end_date.addYears(-1)
+
+        start_date_str = start_date.toString("yyyy-MM-dd")
+        end_date_str = end_date.toString("yyyy-MM-dd")
+
+        cursor = self.db.conn.cursor()
+        cursor.execute(
+            """
+            SELECT t.date, te.weight, te.distance
+            FROM training_exercises te
+            JOIN exercises e ON te.exercise_id = e.id
+            JOIN trainings t ON te.training_id = t.id
+            WHERE t.user_id = ? AND e.name = ? AND t.date BETWEEN ? AND ?
+            ORDER BY t.date
+            """,
+            (self.user["id"], exercise_name, start_date_str, end_date_str)
+        )
+        exercise_data = cursor.fetchall()
+
+        ax = self.figure.add_subplot(111)
+        ax.set_facecolor('none')
+        ax.tick_params(colors='white', labelsize=6)
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        self.figure.set_facecolor('none')
+
+        if exercise_data:
+            dates = [row[0][-5:] for row in exercise_data]
+            weights = [row[1] for row in exercise_data]
+            distances = [row[2] for row in exercise_data]
+            x = range(len(dates))
+
+            is_cardio = sum(distances) > 0
+            if is_cardio:
+                ax.plot(x, distances, label="Дистанция (км)", color="#00C8FF", marker='o')
+                ax.set_ylabel("Дистанция (км)", color='white', fontsize=6)
+                max_value = max(distances)
+            else:
+                ax.plot(x, weights, label="Вес (кг)", color="#FF6347", marker='o')
+                ax.set_ylabel("Вес (кг)", color='white', fontsize=6)
+                max_value = max(weights)
+
+            ax.legend(
+                fontsize=8,
+                labelcolor='white',
+                facecolor=(0.1647, 0.1647, 0.1647, 0.9),
+                edgecolor='#FF9500',
+                framealpha=0.9,
+                loc='upper left',
+                bbox_to_anchor=(1.03, 1.0)
+            )
+            ax.set_xticks(x)
+            ax.set_xticklabels(dates, rotation=45, color='white')
+            ax.set_title(f"Прогресс: {exercise_name}", fontsize=8, color='white')
+            ax.set_xlabel("Дата", color='white', fontsize=6)
+
+            for i in range(len(dates)):
+                value = distances[i] if is_cardio else weights[i]
+                # Adjust label position to avoid overlap
+                offset = max_value * 0.05  # Fixed offset based on max value
+                if value > max_value * 0.9:  # If value is near the top, place label below
+                    ax.text(i, value - offset, f"{value:.1f}", ha='center', va='top', color='white', fontsize=6)
+                else:  # Otherwise, place label above
+                    ax.text(i, value + offset, f"{value:.1f}", ha='center', va='bottom', color='white', fontsize=6)
+
+            ax.set_position([0.1, 0.15, 0.75, 0.75])
+        else:
+            ax.text(0.5, 0.5, "Нет данных для выбранного упражнения", ha='center', va='center', fontsize=8, color='white')
+
+        self.canvas.draw()
 
     def populate_templates(self):
         self.template_selector.clear()

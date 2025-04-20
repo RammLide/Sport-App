@@ -46,6 +46,21 @@ class DatabaseManager:
                 FOREIGN KEY (type_id) REFERENCES training_types(id)
             )
         """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS exercise_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                exercise_id INTEGER,
+                target_weight REAL,
+                target_reps INTEGER,
+                target_distance REAL,
+                target_date TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (exercise_id) REFERENCES exercises(id)
+            )
+        """)
+
         # Тренировки
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS trainings (
@@ -709,6 +724,34 @@ class DatabaseManager:
             (user_id,)
         )
         return cursor.fetchone()
+    
+    def add_exercise_goal(self, user_id, exercise_id, target_weight, target_reps, target_distance, target_date):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO exercise_goals (user_id, exercise_id, target_weight, target_reps, target_distance, target_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, exercise_id, target_weight, target_reps, target_distance, target_date)
+        )
+        self.conn.commit()
+
+def get_exercise_goals(self, user_id):
+    cursor = self.conn.cursor()
+    cursor.execute("SELECT * FROM exercise_goals WHERE user_id = ?", (user_id,))
+    return cursor.fetchall()
+
+def update_exercise_goal(self, goal_id, target_weight, target_reps, target_distance, target_date):
+    cursor = self.conn.cursor()
+    cursor.execute(
+        """
+        UPDATE exercise_goals
+        SET target_weight = ?, target_reps = ?, target_distance = ?, target_date = ?
+        WHERE id = ?
+        """,
+        (target_weight, target_reps, target_distance, target_date, goal_id)
+    )
+    self.conn.commit()
 
     def close(self):
         self.conn.close()
